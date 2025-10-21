@@ -68,7 +68,7 @@
         "name": "",
         "host": "postgres",
         "hostFieldType": "str",
-        "port": "5435",
+        "port": "5432",
         "portFieldType": "num",
         "database": "iot",
         "databaseFieldType": "str",
@@ -91,7 +91,7 @@
         "id": "c7ad8d6dae49d534",
         "type": "mqtt in",
         "z": "2f58fda264849b1c",
-        "name": "",
+        "name": "Cadastro Device",
         "topic": "device/+/info",
         "qos": "2",
         "datatype": "auto-detect",
@@ -100,7 +100,7 @@
         "rap": true,
         "rh": 0,
         "inputs": 0,
-        "x": 190,
+        "x": 200,
         "y": 100,
         "wires": [
             [
@@ -120,8 +120,8 @@
         "maxTimeMS": "0",
         "handleDocId": false,
         "name": "devices",
-        "x": 780,
-        "y": 80,
+        "x": 800,
+        "y": 60,
         "wires": [
             []
         ]
@@ -149,38 +149,21 @@
         "id": "4000212370bbf0f1",
         "type": "function",
         "z": "2f58fda264849b1c",
-        "name": "infoDevice",
-        "func": "msg.collection = \"devices\";\nmsg.operation = \"updateOne\";\n\nconst update = {\n    $set: {\n        device_id: msg.payload.device_id,\n        light: msg.payload.light,\n        humidity: msg.payload.humidity,\n        update_at: new Date(),\n        created_at: new Date()\n    },\n    $setOnInsert: { _id: msg.payload._id }\n}\n\nmsg.payload = [{ device_id: msg.payload.device_id }, update, { upsert: true }];\n\nreturn msg;",
+        "name": "ProcessInfoDevice",
+        "func": "const deviceId = msg.topic.split(\"/\")[1];\n\nconst device = {\n    $set: {\n        model: msg.payload.model || null,\n        location: msg.payload.location || null,\n        light: msg.payload.light,\n        humidity: msg.payload.humidity,\n        update_at: new Date(),\n        created_at: new Date()\n    },\n    $setOnInsert: { \n        _id: msg.payload._id,\n        created_at:new Date ()\n    }\n}\n\nmsg.payload = [{ device_id: deviceId }, device, { upsert: true }];\n\nmsg.collection = \"devices\";\nmsg.operation = \"updateOne\";\n\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 570,
+        "x": 590,
         "y": 100,
         "wires": [
             [
                 "232a6c85c66ccdb4"
             ]
         ]
-    },
-    {
-        "id": "dd028a2863ae27ce",
-        "type": "debug",
-        "z": "2f58fda264849b1c",
-        "name": "debug 1",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 580,
-        "y": 460,
-        "wires": []
     },
     {
         "id": "8974d458eabb543d",
@@ -195,8 +178,8 @@
         "rap": true,
         "rh": 0,
         "inputs": 0,
-        "x": 160,
-        "y": 280,
+        "x": 200,
+        "y": 240,
         "wires": [
             [
                 "403f79affa0a8f0f"
@@ -208,21 +191,24 @@
         "type": "function",
         "z": "2f58fda264849b1c",
         "name": "function 1",
-        "func": "var objeto = {};\n\nobjeto.query = `INSERT INTO readings (id, Device_id, humidity, unit, created_at) VALUES ($1, $2, $3, $4, $5)`;\nobjeto.params = [\n    msg.payload._id,\n    msg.payload.device_id,\n    msg.payload.humidity,\n    msg.payload.unit,\n    msg.payload.created_at = new Date()\n]\nmsg = {};\nmsg = objeto;\n\n\nif (msg.payload.humidity < 40 ) {\n    msg.collection = \"irrigation_alerts\";\n    msg.operation = \"updateOne\";\n\nconst content = {\n    device_id: msg.payload.device_id,\n    humidity: msg.payload.humidity,\n    update_at: new Date(),\n    created_at: new Date()\n}   \n    msg.payload = content;\n}\n\nconst hora = new Date();\n\n\n\nreturn msg, [msg, content];",
-        "outputs": 2,
+        "func": "const deviceId = msg.topic.split(\"/\")[1];\nconst data = msg.payload;\n\nconst readings = {\n    query: `INSERT INTO readings (id, Device_id, humidity, unit, created_at) VALUES ($1, $2, $3, $4, $5)`,\n    params: [\n        data._id,\n        data.device_id,\n        data.humidity,\n        data.unit,\n        data.created_at = new Date()\n    ]\n}\n\nconst irrigationAlerts = null;\nif (data.humidity < 40) {\n    irrigationAlerts = {\n        collection: \"irrigation_alerts\",\n        operation: \"insertOne\",\n        payload: {\n            _id: data._id,\n            device_id: deviceId,\n            alert: \"HUMIDITY_LESS_THEN_40\",\n            created_at: new Date()\n        }\n    }\n}\n\nlet command = {\n    topic: `device/${deviceId}/cmd/pump`,\n    qos: 1,\n    retain: false,\n    payload: {\n        deviceId: deviceId,\n        light: null\n    }\n}\nconst currentsHours = new Date().getHours();\nif(data.humidity < 40 && ((currentsHours >= 5 && currentsHours < 9) || (currentsHours >=17 && currentsHours < 21))){\n    command.payload.light = \"on\";\n} else {\n    command.payload.light = \"off\";\n}\n\nreturn [readings, irrigationAlerts, command];",
+        "outputs": 3,
         "timeout": 0,
-        "noerr": 0,
+        "noerr": 1,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 560,
-        "y": 280,
+        "x": 600,
+        "y": 240,
         "wires": [
             [
                 "fbb2470f969c97b5"
             ],
             [
                 "208444156fe9f960"
+            ],
+            [
+                "1a486e21920fe1bd"
             ]
         ]
     },
@@ -237,8 +223,8 @@
         "name": "",
         "field": "payload._id",
         "fieldType": "msg",
-        "x": 350,
-        "y": 280,
+        "x": 390,
+        "y": 240,
         "wires": [
             [
                 "d18c15afe8074504"
@@ -249,14 +235,14 @@
         "id": "fbb2470f969c97b5",
         "type": "postgresql",
         "z": "2f58fda264849b1c",
-        "name": "",
+        "name": "Readings",
         "query": "SELECT * FROM ;",
         "postgreSQLConfig": "84cf269ca5a203f6",
         "split": false,
         "rowsPerMsg": 1,
         "outputs": 1,
-        "x": 770,
-        "y": 240,
+        "x": 800,
+        "y": 200,
         "wires": [
             []
         ]
@@ -273,10 +259,28 @@
         "maxTimeMS": "0",
         "handleDocId": false,
         "name": "devices",
-        "x": 780,
-        "y": 320,
+        "x": 800,
+        "y": 280,
         "wires": [
             []
         ]
+    },
+    {
+        "id": "1a486e21920fe1bd",
+        "type": "mqtt out",
+        "z": "2f58fda264849b1c",
+        "name": "",
+        "topic": "",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "183ab79de93076de",
+        "x": 790,
+        "y": 340,
+        "wires": []
     }
 ]
